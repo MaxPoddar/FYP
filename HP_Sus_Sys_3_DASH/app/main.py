@@ -7,6 +7,7 @@ from testing import *
 from CSV_upload import *
 import time
 import requests
+
 from detect_os import detect_os
 user_os = detect_os()
 
@@ -20,6 +21,11 @@ questions = ["\n \n \n Can you tell me how much carbon emission is produced by m
                 "How much is the total carbon emissions for all the machines?\n"]
 
 def start_server():
+    """
+    Starts Ollama server, checking the OS
+    """
+    logs = []
+
     if user_os == "Windows":
         script_name = 'start_server.bat'
     else:  # macOS or Linux
@@ -27,35 +33,33 @@ def start_server():
     
     script_path = os.path.join(os.path.dirname(__file__), script_name)
     
-    if os.path.exists(script_path):
-        print("Starting Ollama server...")
-        print("Please wait for the server to start... \n\n")
+    if not os.path.exists(script_path):
+        logs.append(f"\n\n⚠️  Script to start Ollama server not found: {script_path}")
+        return "\n".join(logs)  
         
-        if user_os == "Windows":
-            subprocess.Popen([script_path], shell=True)
-        else:
-            subprocess.Popen(['sh', script_path])
-        
-        # Wait for the server to start
-        time.sleep(5)  # Adjust this delay if needed
+    logs.append("⏳ Starting Ollama server...")
+    # print("Please wait for the server to start... \n\n")
+    if user_os == "Windows":
+        subprocess.Popen([script_path], shell=True)
     else:
-        print(f"\n\nScript to start Ollama server not found: {script_path}")
+        subprocess.Popen(['sh', script_path])
+    # Wait for the server to start
+    time.sleep(5)  # Adjust this delay if needed
+    return "\n".join(logs)
+    
 
 def check_server():
     try:
         response = requests.get('http://127.0.0.1:11434')  # Adjust URL and port as needed
-        if response.status_code == 200:
-            print("\n\n★ ☆ ★ ☆ Server is up and running ★ ☆ ★ ☆ \n\n")
-        else:
-            print(f"Server returned status code {response.status_code}.\n\n")
-    except requests.ConnectionError:
-        print("Failed to connect to the server. It might not be running. Please check your configuration.")
-        print("Exiting the program without starting the server...")
-        sys.exit()
+    except requests.RequestException as e:
+        raise ConnectionError(f"Could not connect to Ollama: {e}")
+    
+    if response.status_code == 200:
+        return "\n\n★ ☆ ★ ☆ Server is up and running ★ ☆ ★ ☆ \n\n"
+    else:
+        raise RuntimeError(f"Server returned status code {response.status_code}.\n\n")
 
-if __name__ == '__main__':
-    start_server()
-    check_server()
+def prepare_chatbot():
     # If the user does not input any file path, the default test file path will be used
     default_file_path = r"data/1038-0610-0614-day-larger-figures-test.xlsx"
     target_dir = r"data/uploaded_excel_files"
@@ -63,13 +67,11 @@ if __name__ == '__main__':
 
     # Check that the user hasn't quit, and/or that the file was uploaded correctly!
     if uploaded_file_path is None:
-        print("Exiting the program with no successful file upload.")
-        sys.exit()
+        raise RuntimeError("No file uploaded")
     # Initial pipeline for Impact Framework
     # Define the input file path - need to work out how this will work if it's uploaded by the user
     excel_file = uploaded_file_path
     print(excel_file)
-
 
     # Convert the Excel file to a CSV file
     csv_file = convert_xlsx_to_csv(excel_file)
@@ -84,22 +86,17 @@ if __name__ == '__main__':
     # Your main code execution
         modified_csv_path, duration, start_date, end_date, templates, analysis_window = process_csv(original_CSV_filepath, modified_CSV_filepath)
     except ValueError as e:
-        # Print only the error message without the traceback
-        print('\n\n')
-        print(e)
-        print("\n\nYour file is not of the right structure. Please check the file and try again.\n\n")
-        print("Exiting the program with no successful manifest generation.\n\n")
-        sys.exit()
+        raise ValueError(f"Incorrect file structure: {e}")
 
     try:
         manifest_success = safe_generate_manifest(manifest_filepath, modified_csv_path, duration, templates)
 
-        print("\n\n★ ☆ ★ ☆ Attempting to generate manifest file with telemetry data... ★ ☆ ★ ☆\n\n")
+        yield "\n\n★ ☆ ★ ☆ Attempting to generate manifest file with telemetry data... ★ ☆ ★ ☆\n\n"
 
         safe_print_file_info(modified_CSV_filepath, "Modified CSV file")
         safe_print_file_info(manifest_filepath, "Manifest file")
 
-        if duration is not None:
+        if duration:
             print(f"\nThis telemetry data was observed over a period of: {duration} seconds")
         else:
             print("\nWarning: Duration value was not extracted successfully")
@@ -130,8 +127,7 @@ if __name__ == '__main__':
                 print(f"Warning: Could not read manifest file: {str(e)}")
 
     except Exception as e:
-        print(f"An unexpected error occurred: {str(e)}")
-        print("The program will continue running...")
+        raise RuntimeError("Unexpected error")
         
 
     # Construct the command with absolute paths
@@ -139,16 +135,13 @@ if __name__ == '__main__':
     # Run the terminal command
     # command = r"ie --manifest '\manifest1\NEW_z2_G4_Sci.yaml' --output '\manifest1\outputs\z2_G4_Sci_Output'"
 
-    print("\n\n★ ☆ ★ ☆ Running Impact Framework command... ★ ☆ ★ ☆\n\n")
+    yield "\n\n★ ☆ ★ ☆ Running Impact Framework command... ★ ☆ ★ ☆\n\n"
     try:
         result = subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
-        print("Command output:")
-        print(result.stdout)
+        yield "Command output:"
+        yield result.stdout
     except subprocess.CalledProcessError as e:
-        print(f"An error occurred while running the command: {e}")
-        print("Error output:")
-        print(e.stderr)
-        sys.exit(1)
+        raise RuntimeError(f"Impact Framework failed: {e.stderr}")
 
     # Pipeline to run after running the termimnal commmand to run the Impact Framework
     # taking in our raw 'uploaded.xlsx' file
@@ -232,7 +225,9 @@ if __name__ == '__main__':
     # Generate question function contains the dynamic programming approach for calculations
     # generate_question(index, embeddings, model, sentences, questions, machine_ids, model_name)
     # The process user input function contains a wrapper function instead which more flexibly performs calculations for more data points, the llm can judge its applicability for itself. can be applied to any machines not just a 'total' value for all machines
-    process_user_input(machine_ids, model, index, sentences, send_prompt, questions)
+    # process_user_input(machine_ids, model, index, sentences, send_prompt, questions)
+
+    return machine_ids,model,index,sentences,send_prompt,questions
 
     
 

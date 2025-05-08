@@ -24,8 +24,8 @@ def upload_file_to_application_directory(target_dir, default_file_path):
 
     while attempts < max_attempts:
         # Prompt the user for the file path
-        file_path = input("Enter the full path of the XLSX file you want to upload (or press Enter to use the default file, or 'q' to quit): ").strip()
-
+        # file_path = input("Enter the full path of the XLSX file you want to upload (or press Enter to use the default file, or 'q' to quit): ").strip()
+        file_path = ""
         if file_path.lower() == 'q':
             print("Exiting the process.")
             return None

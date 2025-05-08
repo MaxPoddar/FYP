@@ -784,7 +784,7 @@ def parse_user_input(question, term_mapping):
     return None
 
 
-def process_user_input(machine_ids, model, index, sentences, send_prompt, questions):
+def process_user_input(user_question: str, user_role: str, machine_ids, model, index, sentences, send_prompt, questions):
     TERM_MAPPING = {
     'embodied carbon': 'embodied carbon (gCO2eq)',
     'embodied emissions': 'embodied carbon (gCO2eq)',
@@ -796,7 +796,7 @@ def process_user_input(machine_ids, model, index, sentences, send_prompt, questi
     } 
     num_of_machines = str(len(machine_ids))
 
-    user_role = input("Please enter your job title: ").strip().lower()
+    output_log = []
 
     role_contexts = {
         "ceo": (
@@ -1079,164 +1079,76 @@ def process_user_input(machine_ids, model, index, sentences, send_prompt, questi
             "thereby reinforcing our commitment to sustainable operations and responsible technological practices.\n\n"
         )
     }
-    
-    role_context = role_contexts.get(user_role, "")
+    role_context = role_contexts.get(user_role.strip().lower(), "")
     print(f"Role context: {role_context}\n")
 
-    while True:
-        # Display the list of questions with indices
-        for i, question in enumerate(questions):
-            print(f"{i}: {question.strip()}")
-        
-        print("\nEnter a question index (0-7), type your own question, or type 'bye' to exit:")
-        user_input = input().strip()
-
-        if user_input.lower() == 'bye':
-            print("Goodbye!")
-            break
+    # # Display the list of questions with indices
+    # for i, question in enumerate(questions):
+    #     print(f"{i}: {question.strip()}")
     
-        question_index = None
-        # Check if the input is a digit and within the valid range
-        if user_input.isdigit():
-            question_index = int(user_input)
-            if 0 <= question_index < len(questions):
-                # User selected a question from the list
-                q = questions[question_index]
-                print(f"You selected question {question_index}: {q}")
-            else:
-                print("Index out of range. Please enter a number between 0 and 7.")
-                continue
+    # print("\nEnter a question index (0-7), type your own question, or type 'bye' to exit:")
+    # user_input = input().strip()
+
+
+    question_index = None
+    # Check if the input is a digit and within the valid range
+    if user_question.isdigit():
+        question_index = int(user_question)
+        if 0 <= question_index < len(questions):
+            # User selected a question from the list
+            q = questions[question_index]
+            print(f"You selected question {question_index}: {q}")
         else:
-            # Processing the custom question
-            q = user_input
-            print(f"You entered a custom question: {q}")
-        standardised_metric = parse_user_input(q, TERM_MAPPING)
-        # Step 1: Get all RAG values for the question
-        q_embedding = model.encode(q)
-        q_embedding = q_embedding.reshape(1, -1)
+            print("Index out of range. Please enter a number between 0 and 7.")
+    else:
+        # Processing the custom question
+        q = user_question.strip()
+        print(f"You entered a custom question: {q}")
 
-        # Calculate top_k based on 25% of the number of sentences
-        top_k = int(0.25 * len(sentences))
-        distances, indices = index.search(q_embedding, top_k)
+    yield f"You entered: {q}\n\n"
 
-        # Step 2: Extract from the RAG the values the LLM thinks are most important to answer the question
-        prompt = f"""{role_context}
-                Using the provided role context above and the context that follows.
-                Please respond appropriately focusing on business outlook/relevance, and assess with this data how could the future look.
-                Your response should directly be aligned with the repsonsibilities and strategic goals of the unique role and judge if strategy would require collaboration with other roles.
-                Discuss sustainable KPIs relevant to this role and detail how these metrics could drive strategic decisions and business outcomes.
-                Here is your context for a question I will ask you:\n
-                """
-        rag_sentences = []
-        for ind in indices[0]:
-            if 0 <= ind < len(sentences):
-                rag_sentences  += [sentences[ind]]
-                prompt += f"{sentences[ind]}\n"
-            else:
-                print(f"Warning: Index {ind} is out of range.")
-        if question_index is not None and question_index == 1:
-                prompt += f"Use the above context to answer this question:\n{q}\n"
-                prompt += '''VERY IMPORTANT:  Return to me, in JSON format,
-                the data I need from the context above to answer the question.  The JSON format should be as follows:
-                [
-                    {
-                        "machine": <machine id>,
-                        <data-field0>: <data-field0 value>,
-                        <data-field1>: <data-field1 value>,
-                        etc.
-                    }
-                ]
-                The data field keys should ONLY be an exactly copied label (not an abbreviation or reduction) from the context I provided and the values should be the actual values from the context I provided.
-                VERY IMPORTANT: There are ''' + num_of_machines + ' machines in this total. Check the context properly. Do not leave any out. ' + num_of_machines + ' MACHINES therefore ' + num_of_machines + ' dictionaries in the list.'
-                prompt += "\nHere is that context again:\n"
-                for ind in indices[0]:
-                    prompt += f"{sentences[ind]}\n"
-                # print("prompt:", prompt)
-                # response = send_prompt(prompt, interface="ollama")
-                # print(response)
-                response = ""
-                for chunk in send_prompt(prompt=prompt, interface="ollama", temperature=0):
-                    response += chunk
-                    print(chunk, end='', flush=True)
-                json_response = response
-                # remove any pre-amble or post comment from llm by getting location of first [ and last ]
-                json_response = json_response[json_response.find('['):json_response.rfind(']')+1]
-# =================================================================================================================================================================
-# Would be where llm judges the type of question it has been asked (see archive: archive\arhive-llm-getting-llm-to-judge-question-type.py)
-# =================================================================================================================================================================
-                prompt = "Here is your context for a question I will ask you:\n"
-                prompt += json_response + "\n"
-                prompt += f"Here is a question for you to answer using the above context:\n{q}\n"
-                prompt += '''VERY IMPORTANT: Do not answer this question directly, write me a Python function called calculation that 
-                uses the context JSON to do the calculation and imports no libraries. The parameter must be called param.
-                The function should take as 
-                input a single JSON object with the data needed to answer the question and return only the numercial answer to the 
-                    question. 
-                Respond to this prompt only with the Python code and nothing else. 
-                IMPORTANT: Remember, the Python function must be called calculation and should have a single parameter called param.
-                IT IS VERY IMPORTANT YOU ONLY RETURN THE PYTHON FUNCTION AND NO INTRODUCTION OR PREAMBLE OR EXPLANATION OR EXAMPLES.
-                YOUR RESPONSE NEEDS TO DIRECTLY INPUTABLE TO THE PYTHON INTERPRETER. 
-                Make sure the function RETURNS a value or values and doesn't just print them.
-                Also: when coding, remember that the param is a list of dictionaries.
-                VERY IMPORTANT: Only use the precise data field labels from the context I provided in the Python code you return.
-                Here's the context again:'''
-                prompt += json_response + "\n"
-                # print("*" * 100)
-                response = ""
-                for chunk in send_prompt(prompt=prompt, interface="ollama", temperature=0):
-                    response += chunk
-                    print(chunk, end='', flush=True)
-                # response = send_prompt(prompt, interface="ollama")
-                response = response.replace('```python', '').replace('```', '')
-                # assume that the function name is always returned correctly and use that to get rid of any unwanted llm  preamble
-                response = response[response.find('def calculation'):]
-                response = response.split('\n\n')[0]
-                print("\n\n\n")
-                print("*" * 100)
-                response += "\nparam = eval('''" + json_response + "''')\nprint(calculation(param))\n"
-                print(response)
+    standardised_metric = parse_user_input(q, TERM_MAPPING)
+    # Step 1: Get all RAG values for the question
+    q_embedding = model.encode(q)
+    q_embedding = q_embedding.reshape(1, -1)
 
-                # print("*" * 100)
-                output_buffer = io.StringIO()
-                sys.stdout = output_buffer
-                exec(response)
-                sys.stdout = sys.__stdout__
-                """try getvalue() too"""
-                print(f"Answer in gcO2eq: {output_buffer.getvalue()}")
-                prompt = f'Here is your answer to the question {q}: {output_buffer.getvalue()}\n'
-                # prompt += output_buffer.getvalue()
-                prompt += f"If there is any additional relevant data in the following context which you think is important to add to answer the question {q}, enhance your answer with it.  IMPORTANT: If there is none, your next response should be empty.: "
-                for ind in indices[0]:
-                    if 0 <= ind < len(sentences):
-                        prompt += f"{sentences[ind]}\n"
-                    else:
-                        print(f"Warning: Index {ind} is out of range.")
-                prompt += f"Your response must be in plain English, including the value {output_buffer.getvalue()} in gCO2eq. Do not include any code in your response."
-                # response = send_prompt(prompt, interface="ollama", temperature=0)
-                for chunk in send_prompt(prompt=prompt, interface="ollama", temperature=0):
-                    print(chunk, end='', flush=True)
-                # print(f'\n\n\n', response)
-                print("\n\n\n")
-                continue
-        if standardised_metric:
-            prompt += f"Use the above context to answer the question based on the metric: {standardised_metric}.\n"
-            prompt += 'DO NOT MIX UP THE VALUES ACROSS THE MACHINES! \n\n\n'
+    # Calculate top_k based on 25% of the number of sentences
+    top_k = int(0.25 * len(sentences))
+    distances, indices = index.search(q_embedding, top_k)
+
+    # Step 2: Extract from the RAG the values the LLM thinks are most important to answer the question
+    prompt = f"""{role_context}
+            Using the provided role context above and the context that follows.
+            Please respond appropriately focusing on business outlook/relevance, and assess with this data how could the future look.
+            Your response should directly be aligned with the repsonsibilities and strategic goals of the unique role and judge if strategy would require collaboration with other roles.
+            Discuss sustainable KPIs relevant to this role and detail how these metrics could drive strategic decisions and business outcomes.
+            Here is your context for a question I will ask you:\n
+            """
+    rag_sentences = []
+    for ind in indices[0]:
+        if 0 <= ind < len(sentences):
+            rag_sentences  += [sentences[ind]]
+            prompt += f"{sentences[ind]}\n"
         else:
-            prompt += f"Use the above context to answer this question:\n{q}\n"
-        # Use the decorator logic to check if the question requires a special calculation
-        response = model_response(q, machine_ids, rag_sentences)
-        # print('response', response)
-        if "total" in q.lower() or "sum" in q.lower() or "add" in q.lower():
-            if response.startswith("The"):
-                # Skip further process if calculation is done
-                print(response)
-                continue
+            print(f"Warning: Index {ind} is out of range.")
 
-        # Append additional instructions
-        prompt += f"VERY IMPORTANT: you must take into account all {num_of_machines} machines and their respective data in the context OTHERWISE I WILL LOSE MY JOB."
-        prompt += '\n\nDO NOT MIX UP THE VALUES ACROSS THE MACHINES! \n\n'
+    if standardised_metric:
+        prompt += f"Use the above context to answer the question based on the metric: {standardised_metric}.\n"
+        prompt += 'DO NOT MIX UP THE VALUES ACROSS THE MACHINES! \n\n\n'
+    else:
+        prompt += f"Use the above context to answer this question:\n{q}\n"
+    # Use the decorator logic to check if the question requires a special calculation
+    response = model_response(q, machine_ids, rag_sentences)
+    # print('response', response)
+    if "total" in q.lower() or "sum" in q.lower() or "add" in q.lower():
+        if response.startswith("The"):
+            # Skip further process if calculation is done
+            print(response)
 
-        # Get the response from the LLM
-        for chunk in send_prompt(prompt=prompt, interface="ollama", temperature=0):
-            print(chunk, end='', flush=True)
-        print("\n\n\n")
+    # Append additional instructions
+    prompt += f"VERY IMPORTANT: you must take into account all {num_of_machines} machines and their respective data in the context OTHERWISE I WILL LOSE MY JOB."
+    prompt += '\n\nDO NOT MIX UP THE VALUES ACROSS THE MACHINES! \n\n'
+
+    # Get the response from the LLM
+    for chunk in send_prompt(prompt=prompt, interface="ollama", temperature=0):
+        yield chunk

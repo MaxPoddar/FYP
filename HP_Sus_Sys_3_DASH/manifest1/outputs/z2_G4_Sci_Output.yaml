@@ -197,14 +197,15 @@ execution:
     C:\Program Files\nodejs\node.exe
     C:\Users\max.poddar\AppData\Roaming\npm\node_modules\@grnsft\if\build\if-run\index.js
     --manifest
-    C:\Users\max.poddar\FYP_local\HP_Sus_Sys_3\manifest1\z2_G4_Sci.yaml --output
-    C:\Users\max.poddar\FYP_local\HP_Sus_Sys_3\manifest1\outputs\z2_G4_Sci_Output.yaml
+    C:\Users\max.poddar\FYP_REPO\FYP\HP_Sus_Sys_3_DASH\manifest1\z2_G4_Sci.yaml
+    --output
+    C:\Users\max.poddar\FYP_REPO\FYP\HP_Sus_Sys_3_DASH\manifest1\outputs\z2_G4_Sci_Output.yaml
   environment:
     if-version: 0.6.0
     os: "Microsoft Windows 10 Pro\r"
     os-version: 10.0.19045 N/A Build 19045
     node-version: 20.14.0
-    date-time: 2025-04-11T00:33:24.143Z (UTC)
+    date-time: 2025-05-07T17:53:16.807Z (UTC)
     dependencies: []
   status: success
 tree:
