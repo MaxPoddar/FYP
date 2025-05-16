@@ -4,3 +4,5 @@
 2. pip install streamlit
 3. For running locally, ensure Ollama running in background
 4. run command (inside HP_Sus_Sys_3_DASH): streamlit run app/dashboard.py OR python -m streamlit run app/dashboard.py
+
+(May not run as expected on MacOS due to lack of support for some dependancies) 
